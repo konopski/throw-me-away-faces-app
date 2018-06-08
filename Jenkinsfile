@@ -2,6 +2,7 @@ try {
     runPipeline()
 } catch(e) { 
     //TODO notify error
+    throw e
 }
 
 def JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU" 
@@ -10,6 +11,7 @@ def runPipeline() {
     node('master') {
         stage('build-init'){
             checkout scm 
+            currentBuild.displayName = readMavenPom().version
             bat "mvn -q -B clean"
         }
         stage('code-compile'){
