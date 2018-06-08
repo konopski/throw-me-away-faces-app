@@ -10,14 +10,14 @@ def runPipeline() {
     node('master') {
         stage('build-init'){
             checkout scm 
-            sh "mvn -q -B clean"
+            bat "mvn -q -B clean"
         }
         stage('code-compile'){
-            sh "mvn -q -B install -DskipTests"
+            bat "mvn -q -B install -DskipTests"
         }
         stage('code-test-unit'){
             echo "time for testing !!!"
-            sh "mvn -q -B test"
+            bat "mvn -q -B test"
         }
         stage('code-test-integration'){
             echo "time for even more testing !!!"
