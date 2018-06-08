@@ -15,7 +15,7 @@ def runPipeline() {
             bat "mvn -q -B clean"
         }
         stage('code-compile'){
-            bat "mvn -q -B install -DskipTests"
+            bat "mvn -q -B compile -DskipTests"
         }
         stage('code-test-unit'){
             echo "time for testing !!!"
@@ -30,7 +30,10 @@ def runPipeline() {
         stage('database-migrate'){
             echo """mvn -q -B -Djdbc.url=$JDBC_URL properties:read-project-properties liquibase:update """
         }
-        stage('deploy-package'){
+        stage('package-build'){
+            bat "mvn -q -B install -DskipTests"
+        }
+        stage('package-deploy'){
             echo "TODO deploy"
         }
     }
