@@ -5,9 +5,11 @@ try {
     throw e
 }
 
-def JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU" 
 
 def runPipeline() {
+
+    def JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU" 
+
     node('master') {
         stage('build-init'){
             checkout scm 
