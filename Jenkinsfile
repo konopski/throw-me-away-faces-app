@@ -1,5 +1,5 @@
 try {
-    runPipeline()
+    timestamps { runPipeline() }
 } catch(e) { 
     //TODO notify error
     throw e
