@@ -26,6 +26,7 @@ under the License.
   <interactiveMode>false</interactiveMode>
   <pluginGroups>
       <pluginGroup>external.atlassian.jgitflow</pluginGroup>
+      <pluginGroup>org.codehaus.mojo</pluginGroup>
   </pluginGroups>
   <proxies>
   </proxies>
