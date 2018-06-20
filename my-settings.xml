@@ -25,6 +25,7 @@ under the License.
 <localRepository>C:/.m2/repository-outside</localRepository>
   <interactiveMode>false</interactiveMode>
   <pluginGroups>
+      <pluginGroup>external.atlassian.jgitflow</pluginGroup>
   </pluginGroups>
   <proxies>
   </proxies>
