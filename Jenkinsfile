@@ -17,6 +17,12 @@ class TurboPipeline implements Serializable {
         }
 
     }
+
+    def prepareNextVersion(String currVersion) {
+        def versionComponents = currVersion.replace("-SNAPSHOT", "").split("\\.")
+        versionComponents[-1] = 1 + Integer.getInteger(versionComponents.last(), 0)
+        versionComponents.join(".")
+    }
 }
 
 def turbo = new TurboPipeline(this)
@@ -26,7 +32,11 @@ turbo.turboRun({
     node('master') {
         stage('build-init'){
             checkout scm
-            currentBuild.displayName = readMavenPom().version
+            def oldVersion = readMavenPom().version
+            echo "old version: $oldVersion"
+            def version = turbo.prepareNextVersion(oldVersion)
+            echo "updating to version: $version"
+            currentBuild.displayName = version
             bat "mvn -q -B clean"
         }
         stage('code-compile'){
