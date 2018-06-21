@@ -1,6 +1,7 @@
 
 class TurboPipeline implements Serializable {
     def JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU"
+    def credentialsId = "konopski"
 
     def hudson
 
@@ -20,8 +21,16 @@ class TurboPipeline implements Serializable {
 
     def prepareNextVersion(String currVersion) {
         def versionComponents = currVersion.replace("-SNAPSHOT", "").split("\\.")
-        versionComponents[-1] = 1 + Integer.getInteger(versionComponents.last(), 0)
+        versionComponents[-1] = Integer.getInteger(versionComponents.last(), 0) + 1
         versionComponents.join(".")
+    }
+
+    def commitAndTag(String version) {
+        hudson.sshagent(credentials: [credentialsId]) {
+            hudson.bat """git add pom.xml"""
+            hudson.bat """git commit -m "bump version to ${version}" && git push"""
+            hudson.bat """git tag -a ${version} -m "version ${version}" && git push --tags"""
+        }
     }
 }
 
@@ -37,6 +46,7 @@ turbo.turboRun({
             def version = turbo.prepareNextVersion(oldVersion)
             echo "updating to version: $version"
             currentBuild.displayName = version
+            bat "mvn -q -B versions:set -DnewVersion=${version} -s my-settings.xml"
             bat "mvn -q -B clean"
         }
         stage('code-compile'){
@@ -60,6 +70,16 @@ turbo.turboRun({
         }
         stage('package-deploy'){
             echo "TODO deploy"
+        }
+        stage('build-finalize'){
+            def version = readMavenPom().version
+            def credentialsId = "konopski"
+
+            sshagent(credentials: [credentialsId]) {
+                bat """git add pom.xml"""
+                bat """git commit -m "bump version to ${version}" && git push"""
+                bat """git tag -a ${version} -m "version ${version}" && git push --tags"""
+            }
         }
     }
 })
