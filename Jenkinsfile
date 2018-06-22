@@ -1,7 +1,128 @@
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.Files
+
+class Propagated implements Serializable {
+
+    final String email = "konopski@throw.away.me"
+    final String user = "Lukasz Konopski"
+
+    def hudson
+    String directoryName
+    String remoteRepository
+    String outputCredentialsId
+
+    Command command
+
+    Propagated(
+            hudson,
+            Command command,
+            String directoryName,
+            String remoteRepository,
+            String outputCredentialsId) {
+        this.hudson = hudson
+        this.directoryName = directoryName
+        this.remoteRepository = remoteRepository
+        this.outputCredentialsId = outputCredentialsId
+        this.command = command
+    }
+
+    def moveToOutputDir() {
+        Path fromPath = Paths.get(
+                hudson.pwd(), 'original', directoryName
+        ).normalize()
+        Path toPath = Paths.get(
+                hudson.pwd(), 'output', directoryName
+        ).normalize()
+        Files.move(fromPath, toPath)
+    }
+
+    def initGitRepo() {
+
+        hudson.sshagent(credentials: [outputCredentialsId]) {
+            command.emit("""git init""")
+            command.emit("""git config user.email ${email}""")
+            command.emit("""git config user.name ${user}""")
+            command.emit("""git config pull.rebase true""")
+            command.emit("""git remote add origin ${remoteRepository}""")
+            command.emit("""git add .""")
+            command.emit("""git commit -m "next build" """)
+            command.emit("""git pull origin master""")
+        }
+    }
+
+    def tagAndPush(String version) {
+        hudson.sshagent(credentials: [outputCredentialsId]) {
+            command.emit("""git push origin master""")
+            try {
+                def i = new java.util.Random(new java.util.Date().getTime()).nextInt()
+                command.emit("""git tag -a ${version}_${i} -m "version ${version}" && git push --tags""")
+                //TODO use just version here
+                //command.emit("""git tag -a ${version} -m "version ${version}" && git push --tags""")
+            } catch (e) {
+                hudson.echo e.getMessage()
+            }
+        }
+    }
+
+}
+
+class Command implements Serializable {
+    def hudson
+    boolean echoOnly
+    boolean isWindows
+
+    Command(hudson, boolean echoOnly) {
+        this.hudson = hudson
+        this.echoOnly = echoOnly
+        this.isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+    }
+
+    def emit(String command) {
+        if(echoOnly) {
+            hudson.echo "$command"
+        } else {
+            if(isWindows) {
+                hudson.bat "$command"
+            } else {
+                hudson.sh "$command"
+            }
+        }
+    }
+
+}
+
+
+class Maven implements Serializable {
+    final String JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU"
+
+    final String mvnCmdPrefix = "mvn -q -B -s my-settings.xml "
+
+    Command command
+
+    Maven(Command command) {
+        this.command = command
+    }
+
+    def cleanProject() {
+        command.emit(mvnCmdPrefix + "clean")
+    }
+
+    def compileProject() {
+        command.emit(mvnCmdPrefix + "-DskipTests compile")
+    }
+
+    def newVersion(String version) {
+        command.emit(mvnCmdPrefix + "versions:set -DnewVersion=${version}")
+    }
+
+    def liquibaseUpdate() {
+        command.emit("""-Djdbc.url=${JDBC_URL} properties:read-project-properties liquibase:update """)
+    }
+}
 
 class TurboPipeline implements Serializable {
-    def JDBC_URL = "jdbc:oracle:thin:@172.16.2.107:1521:AOU"
-    def credentialsId = "konopski"
+    final def credentialsId = 'throw-me-away-key'
 
     def hudson
 
@@ -25,62 +146,54 @@ class TurboPipeline implements Serializable {
         versionComponents.join(".")
     }
 
-    def commitAndTag(String version) {
-        hudson.sshagent(credentials: [credentialsId]) {
-            hudson.bat """git add pom.xml"""
-            hudson.bat """git commit -m "bump version to ${version}" && git push"""
-            hudson.bat """git tag -a ${version} -m "version ${version}" && git push --tags"""
-        }
-    }
 }
+
+
+def command = new Command(this, false)
+
+def maven = new Maven(command)
+
+def propagate = [
+    new Propagated(this, command, ".", "git@github.com:konopski/jprog.git", "konopski-jprog")
+]
 
 def turbo = new TurboPipeline(this)
 
 turbo.turboRun({
 
     node('master') {
-        stage('build-init'){
-            checkout scm
-            def oldVersion = readMavenPom().version
-            echo "old version: $oldVersion"
-            def version = turbo.prepareNextVersion(oldVersion)
-            echo "updating to version: $version"
-            currentBuild.displayName = version
-            bat "mvn -q -B versions:set -DnewVersion=${version} -s my-settings.xml"
-            bat "mvn -q -B clean"
-        }
-        stage('code-compile'){
-            bat "mvn -q -B compile -DskipTests -s my-settings.xml"
-        }
-        stage('code-test-unit'){
-            echo "time for testing !!!"
-            bat "mvn -q -B test -s my-settings.xml"
-        }
-        stage('code-test-integration'){
-            echo "time for even more testing !!!"
-        }
-        stage('code-analyze'){
-            echo "execute sonar plugin here ?"
-        }
-        stage('database-migrate'){
-            echo """mvn -q -B -Djdbc.url=${turbo.JDBC_URL} properties:read-project-properties liquibase:update """
-        }
-        stage('package-build'){
-            bat "mvn -q -B install -DskipTests -s my-settings.xml"
-        }
-        stage('package-deploy'){
-            echo "TODO deploy"
-        }
-        stage('build-finalize'){
-            def version = readMavenPom().version
-            def credentialsId = "konopski"
-
-            sshagent(credentials: [credentialsId]) {
-                bat """git add pom.xml"""
-                bat """git commit -m "bump version to ${version}" && git push"""
-                bat """git tag -a ${version} -m "version ${version}" && git push --tags"""
+        stage('build-init') {
+            cleanWs()
+            bat "rm -rf original"
+            bat "rm -rf output"
+            dir('original') {
+                checkout scm
+                bat """git checkout ${params.sourceBranch}"""
+                def oldVersion = readMavenPom().version
+                echo "old version: $oldVersion"
+                def version = turbo.prepareNextVersion(oldVersion)
+                echo "updating to version: $version"
+                currentBuild.displayName = version
+                maven.newVersion(version)
+                maven.cleanProject()
             }
         }
+        stage('extract-build-propagate') {
+            dir('original') {
+                bat "rm -rf .git"
+            }
+            for(p in propagate) {
+                p.moveToOutputDir()
+                dir('output') {
+                    dir(p.directoryName) {
+                        p.initGitRepo()
+                        maven.compileProject()
+                        p.tagAndPush(readMavenPom().version)
+                    }
+                }
+            }
+        }
+
     }
 })
 
