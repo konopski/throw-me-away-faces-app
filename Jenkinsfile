@@ -21,7 +21,7 @@ class TurboPipeline implements Serializable {
 
     def prepareNextVersion(String currVersion) {
         def versionComponents = currVersion.replace("-SNAPSHOT", "").split("\\.")
-        versionComponents[-1] = Integer.getInteger(versionComponents.last(), 0) + 1
+        versionComponents[-1] =  1 + (versionComponents.last().toInteger() ?: 0)
         versionComponents.join(".")
     }
 
