@@ -39,15 +39,18 @@ class Propagated implements Serializable {
 
     def initGitRepo() {
 
+        def targetBranch = hudson.params.targetBranch
+
         hudson.sshagent(credentials: [outputCredentialsId]) {
             command.emit("""git init""")
             command.emit("""git config user.email ${email}""")
             command.emit("""git config user.name ${user}""")
             command.emit("""git config pull.rebase true""")
             command.emit("""git remote add origin ${remoteRepository}""")
+            command.emit("""git checkout -b ${targetBranch}""")
             command.emit("""git add .""")
             command.emit("""git commit -m "next build" """)
-            command.emit("""git pull origin master""")
+            command.emit("""git pull origin ${targetBranch}""")
         }
     }
 
@@ -196,5 +199,3 @@ turbo.turboRun({
 
     }
 })
-
-
